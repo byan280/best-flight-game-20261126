@@ -1,21 +1,32 @@
-// Skyway — a small, polished flight game, built fresh for make.fun's
-// "Make the best flight game" bounty (best-flight-game-20261126-0057).
+// Skyway — page builder, second rewrite.
 //
-// main.ts runs on Node 22 with no dependencies, no network and no secrets.
-// It writes the whole playable game to index.html: open that file in a
-// desktop browser and fly. Everything the game needs is generated here.
-// The output directory is MAKEFUN_OUTPUT_DIR when set (the grader mounts
-// the repo read-only and provides a writable /output), falling back to
-// out/ next to this file for a local run.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+// This script produces one self-contained HTML file: the Skyway flight
+// game. It runs with plain Node, needs no packages and no network, and
+// writes nothing except the single page it generates.
+//
+// The page text is kept in a handful of named sections below and joined
+// together. The destination folder honours MAKEFUN_OUTPUT_DIR when that
+// variable is set, so the script also works when the checkout itself is
+// read-only; otherwise the page lands in an "out" folder beside this file.
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? join(ROOT, "out");
-const OUT_FILE = join(OUT_DIR, "index.html");
+// Directory that holds this script, resolved from its own URL so the
+// default output folder is always next to the script itself.
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-const html = `<!DOCTYPE html>
+function resolveOutputDir(): string {
+  const override = process.env.MAKEFUN_OUTPUT_DIR;
+  if (override) return override;
+  return path.join(SCRIPT_DIR, "out");
+}
+
+// First section: document head, styles, overlay markup, and the opening
+// of the game script (helpers, canvas setup, input, procedural audio,
+// and the start of the shared game state).
+const partTop = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -255,7 +266,11 @@ function saveBest(v) {
 var G = {
   mode: "title", time: 0, dist: 0, score: 0, best: loadBest(), combo: 1,
   speed: 280, baseSpeed: 280, shake: 0, spawnIn: 500, gustT: 0, gustNext: 16,
-  flash: 0, toastT: 0,
+`;
+
+// Second section: the rest of the shared state, entity spawners, the
+// per-frame update with collisions, and the start of the render code.
+const partState = `  flash: 0, toastT: 0,
   rings: [], stars: [], fuels: [], mounts: [], birds: [], balloons: [], storms: [],
   clouds: [], parts: [], floats: []
 };
@@ -515,7 +530,12 @@ function drawSky(sky) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   /* stars */
-  if (sky.night > 0.05) {
+`;
+
+// Third section: the rest of the drawing routines — sky and stars,
+// ridges, clouds, ground, mountains, rings, pickups, birds, balloons,
+// storms, and the start of the plane drawing.
+const partRender = `  if (sky.night > 0.05) {
     ctx.save();
     ctx.globalAlpha = sky.night;
     for (var i = 0; i < starfield.length; i++) {
@@ -775,7 +795,12 @@ function drawPlane() {
   ctx.fillStyle = "#8d0801";
   ctx.beginPath();
   ctx.moveTo(-20, -3); ctx.lineTo(-30, -14); ctx.lineTo(-24, 0); ctx.lineTo(-30, 2);
-  ctx.closePath(); ctx.fill();
+`;
+
+// Fourth section: the rest of the plane drawing, particles, floating
+// scores, the HUD, the frame composer, screen flow, and the main loop,
+// followed by the document closing tags.
+const partFinal = `  ctx.closePath(); ctx.fill();
   var body = ctx.createLinearGradient(0, -12, 0, 12);
   body.addColorStop(0, "#ef476f"); body.addColorStop(0.55, "#e63946"); body.addColorStop(1, "#b0222f");
   ctx.fillStyle = body;
@@ -1011,22 +1036,40 @@ window.requestAnimationFrame(frame);
 </html>
 `;
 
-mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(OUT_FILE, html, "utf8");
+// Assemble the page from its sections, in order.
+const pageText: string = [partTop, partState, partRender, partFinal].join("");
 
-const written = readFileSync(OUT_FILE, "utf8");
-const markers = [
+// Sanity markers: the assembled page must contain each of these.
+// They are checked before anything is written.
+const EXPECTED_MARKERS: string[] = [
   "<!DOCTYPE html>",
-  '<canvas id="game"',
+  "<title>Skyway — a little flight game</title>",
+  'id="game"',
   "requestAnimationFrame",
-  "Skyway",
-  "startGame",
-  "</html>",
+  "COMBO x",
+  "</html>\n",
 ];
-const missing = markers.filter((m) => !written.includes(m));
-if (missing.length > 0) {
-  console.error("skyway: missing markers: " + missing.join(", "));
-  process.exit(1);
+
+function countPassedMarkers(text: string): number {
+  let passed = 0;
+  for (const marker of EXPECTED_MARKERS) {
+    if (text.includes(marker)) passed++;
+  }
+  return passed;
 }
-console.log("skyway: wrote out/index.html (" + written.length + " bytes)");
-console.log("skyway: checks passed (" + markers.length + "/" + markers.length + ")");
+
+function main(): void {
+  const passed = countPassedMarkers(pageText);
+  if (passed !== EXPECTED_MARKERS.length) {
+    console.error("skyway: checks failed (" + passed + "/" + EXPECTED_MARKERS.length + ")");
+    process.exit(1);
+  }
+  const dir = resolveOutputDir();
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "index.html"), pageText, "utf8");
+  console.log("skyway: wrote out/index.html (" + pageText.length + " bytes)");
+  console.log("skyway: checks passed (" + passed + "/" + EXPECTED_MARKERS.length + ")");
+}
+
+main();
+
