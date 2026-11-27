@@ -2,14 +2,17 @@
 // "Make the best flight game" bounty (best-flight-game-20261126-0057).
 //
 // main.ts runs on Node 22 with no dependencies, no network and no secrets.
-// It writes the whole playable game to out/index.html: open that file in a
+// It writes the whole playable game to index.html: open that file in a
 // desktop browser and fly. Everything the game needs is generated here.
+// The output directory is MAKEFUN_OUTPUT_DIR when set (the grader mounts
+// the repo read-only and provides a writable /output), falling back to
+// out/ next to this file for a local run.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = join(ROOT, "out");
+const OUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? join(ROOT, "out");
 const OUT_FILE = join(OUT_DIR, "index.html");
 
 const html = `<!DOCTYPE html>
